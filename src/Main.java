@@ -58,6 +58,15 @@ public class Main {
                     scheduler.closeConnection();
                     System.out.println("Exiting the system. Goodbye!");
                     System.exit(0);
+                case 7:
+                    System.out.print("Enter doctor name: ");
+                    String newDoctorName = scanner.nextLine();
+
+                    System.out.print("Enter doctor specialty: ");
+                    String newDoctorSpecialty = scanner.nextLine();
+
+                    scheduler.addDoctor(newDoctorName, newDoctorSpecialty);
+                    break;
 
                 default:
                     System.out.println("Invalid choice. Please try again.");
