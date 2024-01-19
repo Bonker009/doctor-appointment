@@ -1,12 +1,7 @@
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
 
 public class AppointmentScheduler {
     private Connection connection;
-
     public AppointmentScheduler() {
         String url = "jdbc:mysql://localhost:3306/";
         String databaseName = "doctorappointment";
@@ -71,13 +66,16 @@ public class AppointmentScheduler {
         }
     }
 
-    public void scheduleAppointment(String patientName, String doctorName, String date) {
+    public void scheduleAppointment(String patientName, int doctorId, String date) {
         try {
-            if (checkDoctorAvailability(doctorName, date)) {
-                String sql = "INSERT INTO appointments (patient_name, doctor_name, appointment_date) VALUES (?, ?, ?)";
+            createAppointmentsTableIfNotExist(); // Ensure that table exists
+
+            // Check doctor availability
+            if (checkDoctorAvailability(doctorId, date)) {
+                String sql = "INSERT INTO appointments (patient_name, doctor_id, appointment_date) VALUES (?, ?, ?)";
                 try (PreparedStatement statement = connection.prepareStatement(sql)) {
                     statement.setString(1, patientName);
-                    statement.setString(2, doctorName);
+                    statement.setInt(2, doctorId);
                     statement.setString(3, date);
                     statement.executeUpdate();
                     System.out.println("Appointment scheduled successfully.");
@@ -89,8 +87,41 @@ public class AppointmentScheduler {
             handleSQLException(e);
         }
     }
+    public void createAppointmentsTableIfNotExist() {
+        try {
+            String sql = "CREATE TABLE IF NOT EXISTS appointments (" +
+                    "id INT PRIMARY KEY AUTO_INCREMENT," +
+                    "patient_name VARCHAR(45) NOT NULL," +
+                    "doctor_id INT NOT NULL," +
+                    "appointment_date DATE NOT NULL," +
+                    "FOREIGN KEY (doctor_id) REFERENCES doctors(id)" +
+                    ")";
+            try (Statement statement = connection.createStatement()) {
+                statement.executeUpdate(sql);
+                System.out.println("Appointments table created (if not exist).");
+            }
+        } catch (SQLException e) {
+            handleSQLException(e);
+        }
+    }
+
+    public void createDoctorTableIfNotExist() {
+        try {
+            String sql = "CREATE TABLE IF NOT EXISTS doctors ("+
+                    "id INT PRIMARY KEY AUTO_INCREMENT,"+
+                    "doctor_name VARCHAR(45) NOT NULL,"+
+                    "specialty VARCHAR(225) NOT NULL"+")";
+            try (Statement statement = connection.createStatement()) {
+                statement.executeUpdate(sql);
+                System.out.println("Doctors table created (if not exist).");
+            }
+        } catch (SQLException e) {
+            handleSQLException(e);
+        }
+    }
     public void addDoctor(String doctorName, String specialty) {
         try {
+            createDoctorTableIfNotExist();
             String sql = "INSERT INTO doctors (doctor_name, specialty) VALUES (?, ?)";
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
                 statement.setString(1, doctorName);
@@ -102,57 +133,99 @@ public class AppointmentScheduler {
             handleSQLException(e);
         }
     }
+    public void displayDoctors() {
+        try {
+            String sql = "SELECT id, doctor_name, specialty FROM doctors";
+            try (PreparedStatement statement = connection.prepareStatement(sql);
+                 ResultSet resultSet = statement.executeQuery()) {
+
+                // ANSI color codes
+                String ANSI_RESET = "\u001B[0m";
+                String ANSI_CYAN = "\u001B[36m";
+
+                System.out.println(ANSI_CYAN + "Available Doctors:" + ANSI_RESET);
+                System.out.println(ANSI_CYAN + "+----+-----------------+-----------------+" + ANSI_RESET);
+                System.out.println(ANSI_CYAN + "| ID |    Doctor Name  |   Specialty     |" + ANSI_RESET);
+                System.out.println(ANSI_CYAN + "+----+-----------------+-----------------+" + ANSI_RESET);
+
+                while (resultSet.next()) {
+                    int id = resultSet.getInt("id");
+                    String doctorName = resultSet.getString("doctor_name");
+                    String specialty = resultSet.getString("specialty");
+
+                    System.out.printf(ANSI_CYAN + "| %-2d | %-15s | %-15s |" + ANSI_RESET + "\n", id, doctorName, specialty);
+                }
+
+                System.out.println(ANSI_CYAN + "+----+-----------------+-----------------+" + ANSI_RESET);
+            }
+        } catch (SQLException e) {
+            handleSQLException(e);
+        }
+    }
 
     public void displayAppointments() {
         try {
-            String sql = "SELECT * FROM appointments";
+            String sql = "SELECT a.id, a.patient_name, d.doctor_name, a.appointment_date, d.specialty " +
+                    "FROM appointments a " +
+                    "JOIN doctors d ON a.doctor_id = d.id";
             try (PreparedStatement statement = connection.prepareStatement(sql);
                  ResultSet resultSet = statement.executeQuery()) {
 
                 System.out.println("Scheduled Appointments:");
+                System.out.println("+----+-----------------+-----------------+-----------------+---------------------+");
+                System.out.println("| ID |    Patient      |     Doctor      |      Date       | Doctor's Specialty  |");
+                System.out.println("+----+-----------------+-----------------+-----------------+---------------------+");
+
                 while (resultSet.next()) {
+                    int id = resultSet.getInt("id");
                     String patientName = resultSet.getString("patient_name");
                     String doctorName = resultSet.getString("doctor_name");
                     String date = resultSet.getString("appointment_date");
-                    System.out.println("Appointment Details: Patient: " + patientName + ", Doctor: " + doctorName + ", Date: " + date);
+                    String doctorSpecialty = resultSet.getString("specialty");
+
+                    System.out.printf("| %-2d | %-15s | %-15s | %-15s | %-19s |\n", id, patientName, doctorName, date, doctorSpecialty);
                 }
+
+                System.out.println("+----+-----------------+-----------------+-----------------+---------------------+");
             }
         } catch (SQLException e) {
             handleSQLException(e);
         }
     }
-    public boolean checkDoctorAvailability(String doctorName, String date) {
+    public boolean checkDoctorAvailability(int doctorId, String date) {
         try {
-            String sql = "SELECT * FROM appointments WHERE doctor_name = ? AND appointment_date = ?";
+            String sql = "SELECT * FROM appointments WHERE doctor_id = ? AND appointment_date = ?";
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
-                statement.setString(1, doctorName);
+                statement.setInt(1, doctorId);
                 statement.setString(2, date);
                 try (ResultSet resultSet = statement.executeQuery()) {
-                    return !resultSet.next(); // Doctor is available if no appointment is found for the specified date
+                    return !resultSet.next();
                 }
             }
         } catch (SQLException e) {
             handleSQLException(e);
-            return false; // Assume doctor is not available in case of an error
+            return false;
         }
     }
-
-    public void cancelAppointment(String cancelDate) {
+    public void cancelAppointment(int id) {
         try {
-            String sql = "DELETE FROM appointments WHERE appointment_date = ?";
+            String sql = "DELETE FROM appointments WHERE id = ?";
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
-                statement.setString(1, cancelDate);
+                statement.setInt(1, id);  // Use setInt for id
                 int affectedRows = statement.executeUpdate();
                 if (affectedRows > 0) {
                     System.out.println("Appointment canceled successfully.");
                 } else {
-                    System.out.println("No appointment found on the specified date.");
+                    System.out.println("No appointment found with the specified ID.");
                 }
             }
         } catch (SQLException e) {
             handleSQLException(e);
         }
     }
+
+
+
 
     public void searchAppointmentsByPatient(String searchPatient) {
         try {
@@ -170,9 +243,13 @@ public class AppointmentScheduler {
 
     public void searchAppointmentsByDoctor(String searchDoctor) {
         try {
-            String sql = "SELECT * FROM appointments WHERE doctor_name LIKE ?";
+            String sql = "SELECT a.*, d.doctor_name FROM appointments a " +
+                    "JOIN doctors d ON a.doctor_id = d.id " +
+                    "WHERE d.doctor_name LIKE ?";
+
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
                 statement.setString(1, "%" + searchDoctor + "%");
+
                 try (ResultSet resultSet = statement.executeQuery()) {
                     displayAppointmentsResultSet(resultSet);
                 }
@@ -181,6 +258,7 @@ public class AppointmentScheduler {
             handleSQLException(e);
         }
     }
+
 
     private void displayAppointmentsResultSet(ResultSet resultSet) throws SQLException {
         System.out.println("Search Results:");
