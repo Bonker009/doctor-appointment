@@ -1,3 +1,8 @@
+import org.nocrala.tools.texttablefmt.BorderStyle;
+import org.nocrala.tools.texttablefmt.CellStyle;
+import org.nocrala.tools.texttablefmt.ShownBorders;
+import org.nocrala.tools.texttablefmt.Table;
+
 import java.sql.*;
 
 public class AppointmentScheduler {
@@ -68,8 +73,7 @@ public class AppointmentScheduler {
 
     public void scheduleAppointment(String patientName, int doctorId, String date) {
         try {
-            createAppointmentsTableIfNotExist(); // Ensure that table exists
-
+            createAppointmentsTableIfNotExist();
             // Check doctor availability
             if (checkDoctorAvailability(doctorId, date)) {
                 String sql = "INSERT INTO appointments (patient_name, doctor_id, appointment_date) VALUES (?, ?, ?)";
@@ -134,29 +138,30 @@ public class AppointmentScheduler {
         }
     }
     public void displayDoctors() {
+        Table table1 = new Table(3, BorderStyle.UNICODE_BOX_DOUBLE_BORDER, ShownBorders.ALL);
+        table1.setColumnWidth(1, 25, 35);
+        table1.setColumnWidth(0, 9, 15);
+        CellStyle textAlign = new CellStyle(CellStyle.HorizontalAlign.center);
         try {
             String sql = "SELECT id, doctor_name, specialty FROM doctors";
             try (PreparedStatement statement = connection.prepareStatement(sql);
                  ResultSet resultSet = statement.executeQuery()) {
 
                 // ANSI color codes
-                String ANSI_RESET = "\u001B[0m";
-                String ANSI_CYAN = "\u001B[36m";
 
-                System.out.println(ANSI_CYAN + "Available Doctors:" + ANSI_RESET);
-                System.out.println(ANSI_CYAN + "+----+-----------------+-----------------+" + ANSI_RESET);
-                System.out.println(ANSI_CYAN + "| ID |    Doctor Name  |   Specialty     |" + ANSI_RESET);
-                System.out.println(ANSI_CYAN + "+----+-----------------+-----------------+" + ANSI_RESET);
-
+                table1.addCell("Available Doctors",textAlign,3);
+                table1.addCell("Id");
+                table1.addCell("Doctor Name");
+                table1.addCell("Specialty");
                 while (resultSet.next()) {
                     int id = resultSet.getInt("id");
                     String doctorName = resultSet.getString("doctor_name");
                     String specialty = resultSet.getString("specialty");
-
-                    System.out.printf(ANSI_CYAN + "| %-2d | %-15s | %-15s |" + ANSI_RESET + "\n", id, doctorName, specialty);
+                    table1.addCell(String.valueOf(id));
+                    table1.addCell(doctorName);
+                    table1.addCell(specialty);
                 }
-
-                System.out.println(ANSI_CYAN + "+----+-----------------+-----------------+" + ANSI_RESET);
+                System.out.println(table1.render());
             }
         } catch (SQLException e) {
             handleSQLException(e);
@@ -164,6 +169,9 @@ public class AppointmentScheduler {
     }
 
     public void displayAppointments() {
+        Table table2 = new Table(5, BorderStyle.UNICODE_BOX_DOUBLE_BORDER, ShownBorders.ALL);
+
+        CellStyle textAlign = new CellStyle(CellStyle.HorizontalAlign.center);
         try {
             String sql = "SELECT a.id, a.patient_name, d.doctor_name, a.appointment_date, d.specialty " +
                     "FROM appointments a " +
@@ -171,22 +179,26 @@ public class AppointmentScheduler {
             try (PreparedStatement statement = connection.prepareStatement(sql);
                  ResultSet resultSet = statement.executeQuery()) {
 
-                System.out.println("Scheduled Appointments:");
-                System.out.println("+----+-----------------+-----------------+-----------------+---------------------+");
-                System.out.println("| ID |    Patient      |     Doctor      |      Date       | Doctor's Specialty  |");
-                System.out.println("+----+-----------------+-----------------+-----------------+---------------------+");
-
+                table2.addCell("Scheduled Appointments",textAlign,5);
+                table2.addCell("ID");
+                table2.addCell("Patient");
+                table2.addCell("Doctor");
+                table2.addCell("Date");
+                table2.addCell("Doctor's Specialty");
                 while (resultSet.next()) {
                     int id = resultSet.getInt("id");
                     String patientName = resultSet.getString("patient_name");
                     String doctorName = resultSet.getString("doctor_name");
                     String date = resultSet.getString("appointment_date");
                     String doctorSpecialty = resultSet.getString("specialty");
-
-                    System.out.printf("| %-2d | %-15s | %-15s | %-15s | %-19s |\n", id, patientName, doctorName, date, doctorSpecialty);
+                    table2.addCell(String.valueOf(id),textAlign);
+                    table2.addCell(patientName,textAlign);
+                    table2.addCell(doctorName,textAlign);
+                    table2.addCell(date,textAlign);
+                    table2.addCell(doctorSpecialty,textAlign);
                 }
+                System.out.println(table2.render());
 
-                System.out.println("+----+-----------------+-----------------+-----------------+---------------------+");
             }
         } catch (SQLException e) {
             handleSQLException(e);
@@ -223,24 +235,23 @@ public class AppointmentScheduler {
             handleSQLException(e);
         }
     }
-
-
-
-
-    public void searchAppointmentsByPatient(String searchPatient) {
+    public void searchAppointmentById(int id) {
         try {
-            String sql = "SELECT * FROM appointments WHERE patient_name LIKE ?";
+            String sql = "SELECT a.*, d.doctor_name FROM appointments a " +
+                    "JOIN doctors d ON a.doctor_id = d.id " +
+                    "WHERE a.id = ?";
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
-                statement.setString(1, "%" + searchPatient + "%");
+                statement.setInt(1, id);
+
                 try (ResultSet resultSet = statement.executeQuery()) {
                     displayAppointmentsResultSet(resultSet);
+
                 }
             }
         } catch (SQLException e) {
             handleSQLException(e);
         }
     }
-
     public void searchAppointmentsByDoctor(String searchDoctor) {
         try {
             String sql = "SELECT a.*, d.doctor_name FROM appointments a " +
@@ -252,6 +263,7 @@ public class AppointmentScheduler {
 
                 try (ResultSet resultSet = statement.executeQuery()) {
                     displayAppointmentsResultSet(resultSet);
+
                 }
             }
         } catch (SQLException e) {
@@ -261,13 +273,23 @@ public class AppointmentScheduler {
 
 
     private void displayAppointmentsResultSet(ResultSet resultSet) throws SQLException {
+        Table table4 = new Table(3, BorderStyle.UNICODE_BOX_DOUBLE_BORDER, ShownBorders.ALL);
+        CellStyle textAlign = new CellStyle(CellStyle.HorizontalAlign.center);
         System.out.println("Search Results:");
+        table4.addCell("Patient");
+        table4.addCell("Doctor");
+        table4.addCell("Date");
+
         while (resultSet.next()) {
             String patientName = resultSet.getString("patient_name");
             String doctorName = resultSet.getString("doctor_name");
             String date = resultSet.getString("appointment_date");
-            System.out.println("Appointment Details: Patient: " + patientName + ", Doctor: " + doctorName + ", Date: " + date);
+            table4.addCell(patientName);
+            table4.addCell(doctorName);
+            table4.addCell(date);
         }
+        System.out.println(table4.render());
+
     }
 
 
